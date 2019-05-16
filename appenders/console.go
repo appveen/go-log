@@ -3,8 +3,8 @@ package appenders
 import (
 	"fmt"
 
-	"github.com/lakshay2395/go-log/layout"
-	"github.com/lakshay2395/go-log/levels"
+	"github.com/appveen/go-log/layout"
+	"github.com/appveen/go-log/levels"
 )
 
 type consoleAppender struct {

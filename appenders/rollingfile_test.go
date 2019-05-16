@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/lakshay2395/go-log/levels"
+	"github.com/appveen/go-log/levels"
 	"github.com/stretchr/testify/assert"
 )
 

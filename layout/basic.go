@@ -3,7 +3,7 @@ package layout
 import (
 	"fmt"
 
-	"github.com/lakshay2395/go-log/levels"
+	"github.com/appveen/go-log/levels"
 )
 
 type basicLayout struct {

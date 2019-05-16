@@ -12,7 +12,7 @@ Satisfy the Layout interface to implement your own log layout.
 */
 
 import (
-	"github.com/lakshay2395/go-log/levels"
+	"github.com/appveen/go-log/levels"
 )
 
 type Layout interface {

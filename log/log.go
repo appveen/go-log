@@ -3,8 +3,8 @@ package log
 import (
 	"strings"
 
-	"github.com/lakshay2395/go-log/levels"
-	"github.com/lakshay2395/go-log/logger"
+	"github.com/appveen/go-log/levels"
+	"github.com/appveen/go-log/logger"
 )
 
 var global logger.Logger
