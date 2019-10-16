@@ -212,6 +212,8 @@ func pushLogToURL(file string, url string, client *http.Client, customHeaders ma
 	if err != nil {
 		return err
 	}
+	f.Close()
+	os.Remove(file)
 	t := time.Now()
 	payload := LogPayload{
 		Content:        string(data),
@@ -233,6 +235,7 @@ func pushLogToURL(file string, url string, client *http.Client, customHeaders ma
 			req.Header.Set(k, v)
 		}
 	}
+	req.Close = true
 	res, err := client.Do(req)
 	if err != nil {
 		return errors.New(fmt.Sprintf("%s", err))
@@ -240,8 +243,9 @@ func pushLogToURL(file string, url string, client *http.Client, customHeaders ma
 	if res.StatusCode != 200 {
 		return errors.New("request failed = " + string(res.StatusCode))
 	}
-	f.Close()
-	os.Remove(file)
+	if res.Body != nil {
+		res.Body.Close()
+	}
 	return nil
 }
 
