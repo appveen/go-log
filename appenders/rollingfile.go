@@ -13,6 +13,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -28,10 +30,15 @@ type rollingFileAppender struct {
 	MaxFileSize    int64
 	MaxBackupIndex int
 
-	filename   string
-	file       *os.File
-	append     bool
-	writeMutex sync.Mutex
+	filename          string
+	actualFileName    string
+	currentDateInFile string
+	logDirectory      string
+	ReuseableFile     bool
+	file              *os.File
+	append            bool
+	datewiseRotation  bool
+	writeMutex        sync.Mutex
 
 	bytesWritten int64
 
@@ -50,12 +57,16 @@ type LogPayload struct {
 	StartTimestamp time.Time `json:"endTimestamp"`
 }
 
-func RollingFile(filename string, append bool, customBackupFolder string, customFileNameGenerator func() string) *rollingFileAppender {
+func RollingFile(filename string, directoryPath string, actualFileName string, append bool, dateRotation bool, reuseableFile bool, MaxBackupIndex int, customBackupFolder string, customFileNameGenerator func() string) *rollingFileAppender {
 	a := &rollingFileAppender{
 		layout:                  layout.Default(),
 		MaxFileSize:             104857600,
-		MaxBackupIndex:          1,
+		MaxBackupIndex:          MaxBackupIndex,
 		append:                  append,
+		datewiseRotation:        dateRotation,
+		ReuseableFile:           reuseableFile,
+		actualFileName:          actualFileName,
+		logDirectory:            directoryPath,
 		bytesWritten:            0,
 		backupFolder:            customBackupFolder,
 		customFileNameGenerator: customFileNameGenerator,
@@ -80,16 +91,25 @@ func (a *rollingFileAppender) Write(level levels.LogLevel, message string, args 
 	if !strings.HasSuffix(m, "\n") {
 		m += "\n"
 	}
-
 	a.writeMutex.Lock()
-	a.file.Write([]byte(m))
-	info, _ := a.file.Stat()
-	a.bytesWritten += int64(len(m))
-	if info.Size() >= a.MaxFileSize {
-		a.bytesWritten = 0
-		a.rotateFile()
+	if !a.datewiseRotation {
+		a.file.Write([]byte(m))
+		info, _ := a.file.Stat()
+		a.bytesWritten += int64(len(m))
+		if info.Size() >= a.MaxFileSize {
+			a.bytesWritten = 0
+			a.rotateFile()
+		}
+	} else {
+		currentTime := time.Now()
+		expectedDate := currentTime.Format("2006-01-02")
+		if expectedDate != a.currentDateInFile {
+			a.rotateFileDateWise(expectedDate)
+			a.bytesWritten = 0
+		}
+		a.file.Write([]byte(m))
+		a.bytesWritten += int64(len(m))
 	}
-
 	a.writeMutex.Unlock()
 }
 
@@ -106,13 +126,63 @@ func (a *rollingFileAppender) Filename() string {
 }
 
 func (a *rollingFileAppender) SetFilename(filename string) error {
+	currentTime := time.Now()
+	currentDate := currentTime.Format("2006-01-02")
 	if a.filename != filename || a.file == nil {
 		a.closeFile()
 		a.filename = filename
+		if a.datewiseRotation {
+			if a.ReuseableFile {
+				if _, err := os.Stat(a.logDirectory + string(os.PathSeparator) + a.actualFileName[0:len(a.actualFileName)-4] + "_" + currentDate + ".log"); os.IsNotExist(err) {
+					os.Remove(a.filename)
+				}
+			} else {
+				a.deleteOutdatedFile()
+			}
+			a.currentDateInFile = currentDate
+		}
 		err := a.openFile()
 		return err
 	}
 	return nil
+}
+
+func (a *rollingFileAppender) rotateFileDateWise(expectedDate string) {
+	a.closeFile()
+	if a.ReuseableFile {
+		os.Remove(a.filename)
+	} else {
+		fileNameSplitter := strings.Split(a.actualFileName, a.currentDateInFile)
+		a.actualFileName = fileNameSplitter[0] + expectedDate + fileNameSplitter[1]
+		a.filename = a.logDirectory + string(os.PathSeparator) + a.actualFileName
+		a.currentDateInFile = expectedDate
+		a.deleteOutdatedFile()
+	}
+	a.openFile()
+}
+
+func (a *rollingFileAppender) deleteOutdatedFile() {
+	listOfFiles := []string{}
+	files, err := ioutil.ReadDir(a.logDirectory)
+	if err == nil {
+		for _, file := range files {
+			re := regexp.MustCompile(`\d{4}-\d{2}-\d{2}`)
+			if re.MatchString(file.Name()) {
+				listOfFiles = append(listOfFiles, a.logDirectory+string(os.PathSeparator)+file.Name())
+			}
+
+		}
+		sort.Strings(listOfFiles)
+		if len(listOfFiles) > a.MaxBackupIndex {
+			for i := 0; i < len(listOfFiles)-a.MaxBackupIndex; i++ {
+				err := os.Remove(listOfFiles[i])
+				if err != nil {
+					fmt.Println(err)
+				}
+
+			}
+		}
+	}
 }
 
 func (a *rollingFileAppender) rotateFile() {
