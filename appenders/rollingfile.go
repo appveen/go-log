@@ -221,7 +221,7 @@ func (a *rollingFileAppender) rotateFile() {
 		pushLogToURL(filepath.Join(a.backupFolder, filename+".1"), a.LogHookURL, a.Client, a.CustomHeaders)
 	} else {
 		lastFile := a.filename + "." + strconv.Itoa(a.MaxBackupIndex)
-		pushLogToURL(lastFile, a.LogHookURL, a.Client, a.CustomHeaders)
+		//pushLogToURL(lastFile, a.LogHookURL, a.Client, a.CustomHeaders)
 		if _, err := os.Stat(lastFile); err == nil {
 			os.Remove(lastFile)
 		}
@@ -236,8 +236,7 @@ func (a *rollingFileAppender) rotateFile() {
 				}
 				break
 			}
-			pushLogToURL(f2, a.LogHookURL, a.Client, a.CustomHeaders)
-			os.Remove(f2)
+			//	pushLogToURL(f2, a.LogHookURL, a.Client, a.CustomHeaders)
 		}
 		err := os.Rename(a.filename, a.filename+".1")
 		for {
@@ -247,7 +246,7 @@ func (a *rollingFileAppender) rotateFile() {
 			}
 			break
 		}
-		pushLogToURL(a.filename+".1", a.LogHookURL, a.Client, a.CustomHeaders)
+		//pushLogToURL(a.filename+".1", a.LogHookURL, a.Client, a.CustomHeaders)
 	}
 	a.openFile()
 }
