@@ -49,12 +49,17 @@ type rollingFileAppender struct {
 	CustomHeaders           map[string]string
 }
 
-//LogPayload - to shipped to url
+// LogPayload - to shipped to url
 type LogPayload struct {
-	Content        string    `json:"content"`
-	Checksum       string    `json:"checksum"`
-	Timestamp      time.Time `json:"startTimestamp"`
-	StartTimestamp time.Time `json:"endTimestamp"`
+	LogLevel  string    `json:"logLevel"`
+	Timestamp time.Time `json:"timestamp"`
+	Message   string    `json:"message"`
+}
+
+type LogDataEntry struct {
+	Timestamp string `json:"timestamp"`
+	LogLevel  string `json:"level"`
+	Message   string `json:"msg"`
 }
 
 func RollingFile(filename string, directoryPath string, actualFileName string, append bool, dateRotation bool, reuseableFile bool, MaxBackupIndex int, customBackupFolder string, customFileNameGenerator func() string) *rollingFileAppender {
@@ -277,20 +282,30 @@ func pushLogToURL(file string, url string, client *http.Client, customHeaders ma
 	if err != nil {
 		return err
 	}
-	data, err := ioutil.ReadAll(f)
-	if err != nil {
-		return err
+	defer f.Close()
+
+	logPayloadEntries := []LogPayload{}
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Text()
+		line = strings.Replace(line, "\\", "\\\\", -1)
+		fmt.Println(line)
+		logEntry := LogDataEntry{}
+		err = json.Unmarshal([]byte(line), &logEntry)
+		if err != nil {
+			fmt.Println(err)
+		}
+		fmt.Println(logEntry)
+		parsedTimeStamp, err := time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", logEntry.Timestamp)
+		if err != nil {
+			fmt.Println(err)
+			break
+		}
+		logPayloadEntries = append(logPayloadEntries, LogPayload{logEntry.LogLevel, parsedTimeStamp, logEntry.Message})
 	}
-	f.Close()
+
 	os.Remove(file)
-	t := time.Now()
-	payload := LogPayload{
-		Content:        string(data),
-		Checksum:       "",
-		Timestamp:      t,
-		StartTimestamp: t,
-	}
-	jsonData, err := json.Marshal(payload)
+	jsonData, err := json.Marshal(logPayloadEntries)
 	if err != nil {
 		return err
 	}
@@ -298,6 +313,7 @@ func pushLogToURL(file string, url string, client *http.Client, customHeaders ma
 	if err != nil {
 		return err
 	}
+	customHeaders["filePath"] = file
 	req.Header.Set("Content-Type", "application/json")
 	if customHeaders != nil {
 		for k, v := range customHeaders {
@@ -310,7 +326,7 @@ func pushLogToURL(file string, url string, client *http.Client, customHeaders ma
 		return errors.New(fmt.Sprintf("%s", err))
 	}
 	if res.StatusCode != 200 {
-		return errors.New("request failed = " + string(res.StatusCode))
+		return errors.New("Failed to upload logs = " + string(res.StatusCode))
 	}
 	if res.Body != nil {
 		res.Body.Close()
