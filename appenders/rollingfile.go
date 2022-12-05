@@ -289,13 +289,13 @@ func pushLogToURL(file string, url string, client *http.Client, customHeaders ma
 	for scanner.Scan() {
 		line := scanner.Text()
 		line = strings.Replace(line, "\\", "\\\\", -1)
-		fmt.Println(line)
+		// fmt.Println(line)
 		logEntry := LogDataEntry{}
 		err = json.Unmarshal([]byte(line), &logEntry)
 		if err != nil {
 			fmt.Println(err)
 		}
-		fmt.Println(logEntry)
+		// fmt.Println(logEntry)
 		parsedTimeStamp, err := time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", logEntry.Timestamp)
 		if err != nil {
 			fmt.Println(err)
