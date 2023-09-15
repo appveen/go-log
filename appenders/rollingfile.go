@@ -282,14 +282,13 @@ func pushLogToURL(file string, url string, client *http.Client, customHeaders ma
 	if err != nil {
 		return err
 	}
-	defer f.Close()
 
 	logPayloadEntries := []LogPayload{}
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.Contains(line, "Heartbeat") {
-			fmt.Println("contains")
+			// fmt.Println("contains")
 			continue
 		}
 		line = strings.Replace(line, "\\", "\\\\", -1)
@@ -308,7 +307,14 @@ func pushLogToURL(file string, url string, client *http.Client, customHeaders ma
 		logPayloadEntries = append(logPayloadEntries, LogPayload{logEntry.LogLevel, parsedTimeStamp, logEntry.Message})
 	}
 
-	os.Remove(file)
+	fCError := f.Close()
+	if fCError != nil {
+		return fCError
+	}
+	rFError := os.Remove(file)
+	if rFError != nil {
+		return rFError
+	}
 	jsonData, err := json.Marshal(logPayloadEntries)
 	if err != nil {
 		return err
@@ -319,15 +325,13 @@ func pushLogToURL(file string, url string, client *http.Client, customHeaders ma
 	}
 	customHeaders["filePath"] = file
 	req.Header.Set("Content-Type", "application/json")
-	if customHeaders != nil {
-		for k, v := range customHeaders {
-			req.Header.Set(k, v)
-		}
+	for k, v := range customHeaders {
+		req.Header.Set(k, v)
 	}
 	req.Close = true
 	res, err := client.Do(req)
 	if err != nil {
-		return errors.New(fmt.Sprintf("%s", err))
+		return err
 	}
 	if res.StatusCode != 200 {
 		return errors.New("Failed to upload logs = " + string(res.StatusCode))
