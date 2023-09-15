@@ -1,9 +1,8 @@
-module go-log
+module github.com/appveen/go-log
 
 go 1.19
 
 require (
-	github.com/appveen/go-log v0.0.0-20221205110632-463b8e0dc57a
 	github.com/stretchr/testify v1.8.4
 	github.com/t-k/fluent-logger-golang v1.0.0
 )

@@ -1,5 +1,3 @@
-github.com/appveen/go-log v0.0.0-20221205110632-463b8e0dc57a h1:kvGkzrad0Z14+0KHqlm22ViE87qUzuwuc29TPZHBYTQ=
-github.com/appveen/go-log v0.0.0-20221205110632-463b8e0dc57a/go.mod h1:lKZ/iJAx8neVuA5iyjYcTPQIbOOLMTugae3e+OYTEZQ=
 github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869 h1:DDGfHa7BWjL4YnC6+E63dPcxHo2sUxDIu8g3QgEJdRY=
 github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869/go.mod h1:Ekp36dRnpXw/yCqJaO+ZrUyxD+3VXMFFr56k5XYrpB4=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
