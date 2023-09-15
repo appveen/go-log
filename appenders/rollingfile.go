@@ -288,6 +288,10 @@ func pushLogToURL(file string, url string, client *http.Client, customHeaders ma
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := scanner.Text()
+		if strings.Contains(line, "Heartbeat") {
+			fmt.Println("contains")
+			continue
+		}
 		line = strings.Replace(line, "\\", "\\\\", -1)
 		// fmt.Println(line)
 		logEntry := LogDataEntry{}
