@@ -12,7 +12,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -193,37 +192,37 @@ func (a *rollingFileAppender) deleteOutdatedFile() {
 func (a *rollingFileAppender) rotateFile() {
 	a.closeFile()
 	if a.backupFolder != "" {
-		_, filename := filepath.Split(a.filename)
-		if a.customFileNameGenerator != nil {
-			filename = a.customFileNameGenerator()
-		}
-		lastFile := filepath.Join(a.backupFolder, filename+"."+strconv.Itoa(a.MaxBackupIndex))
-		pushLogToURL(lastFile, a.LogHookURL, a.Client, a.CustomHeaders)
-		if _, err := os.Stat(lastFile); err == nil {
-			os.Remove(lastFile)
-		}
-		for n := a.MaxBackupIndex; n > 0; n-- {
-			f1 := filepath.Join(a.backupFolder, filename+"."+strconv.Itoa(n))
-			f2 := filepath.Join(a.backupFolder, filename+"."+strconv.Itoa(n+1))
-			err := os.Rename(f1, f2)
-			for {
-				if strings.Contains(fmt.Sprintf("%s", err), "The process cannot access the file because it is being used by another process") {
-					err = os.Rename(f1, f2)
-					continue
-				}
-				break
-			}
-			pushLogToURL(f2, a.LogHookURL, a.Client, a.CustomHeaders)
-		}
-		err := os.Rename(a.filename, filepath.Join(a.backupFolder, filename+".1"))
-		for {
-			if strings.Contains(fmt.Sprintf("%s", err), "The process cannot access the file because it is being used by another process") {
-				err = os.Rename(a.filename, filepath.Join(a.backupFolder, filename+".1"))
-				continue
-			}
-			break
-		}
-		pushLogToURL(filepath.Join(a.backupFolder, filename+".1"), a.LogHookURL, a.Client, a.CustomHeaders)
+		// _, filename := filepath.Split(a.filename)
+		// if a.customFileNameGenerator != nil {
+		// 	filename = a.customFileNameGenerator()
+		// }
+		// lastFile := filepath.Join(a.backupFolder, filename+"."+strconv.Itoa(a.MaxBackupIndex))
+		pushLogToURL(a.filename, a.LogHookURL, a.Client, a.CustomHeaders)
+		// if _, err := os.Stat(a.filename); err == nil {
+		// 	os.Remove(lastFile)
+		// }
+		// for n := a.MaxBackupIndex; n > 0; n-- {
+		// 	f1 := filepath.Join(a.backupFolder, filename+"."+strconv.Itoa(n))
+		// 	f2 := filepath.Join(a.backupFolder, filename+"."+strconv.Itoa(n+1))
+		// 	err := os.Rename(f1, f2)
+		// 	for {
+		// 		if strings.Contains(fmt.Sprintf("%s", err), "The process cannot access the file because it is being used by another process") {
+		// 			err = os.Rename(f1, f2)
+		// 			continue
+		// 		}
+		// 		break
+		// 	}
+		// 	pushLogToURL(f2, a.LogHookURL, a.Client, a.CustomHeaders)
+		// }
+		// err := os.Rename(a.filename, filepath.Join(a.backupFolder, filename+".1"))
+		// for {
+		// 	if strings.Contains(fmt.Sprintf("%s", err), "The process cannot access the file because it is being used by another process") {
+		// 		err = os.Rename(a.filename, filepath.Join(a.backupFolder, filename+".1"))
+		// 		continue
+		// 	}
+		// 	break
+		// }
+		// pushLogToURL(filepath.Join(a.backupFolder, filename+".1"), a.LogHookURL, a.Client, a.CustomHeaders)
 	} else {
 		lastFile := a.filename + "." + strconv.Itoa(a.MaxBackupIndex)
 		//pushLogToURL(lastFile, a.LogHookURL, a.Client, a.CustomHeaders)
@@ -311,10 +310,10 @@ func pushLogToURL(file string, url string, client *http.Client, customHeaders ma
 	if fCError != nil {
 		return fCError
 	}
-	rFError := os.Remove(file)
-	if rFError != nil {
-		return rFError
-	}
+	// rFError := os.Remove(file)
+	// if rFError != nil {
+	// 	return rFError
+	// }
 	jsonData, err := json.Marshal(logPayloadEntries)
 	if err != nil {
 		return err
