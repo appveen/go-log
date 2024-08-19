@@ -288,7 +288,7 @@ func pushLogToURL(file string, url string, client *http.Client, customHeaders ma
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := scanner.Text()
-		if strings.Contains(line, "Heartbeat") {
+		if strings.Contains(line, "Heartbeat") || strings.Contains(line, "EncryptedChunk") || strings.Contains(line, "Decoded") || strings.Contains(line, "CompressedChunk") || strings.Contains(line, "DataToWriteInFile") {
 			// fmt.Println("contains")
 			continue
 		}
