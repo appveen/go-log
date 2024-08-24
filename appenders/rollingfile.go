@@ -85,6 +85,8 @@ func RollingFile(filename string, directoryPath string, actualFileName string, a
 }
 
 func (a *rollingFileAppender) Close() {
+	a.writeMutex.Lock()
+	defer a.writeMutex.Unlock()
 	if a.file != nil {
 		a.file.Close()
 		a.file = nil
@@ -96,11 +98,25 @@ func (a *rollingFileAppender) Write(level levels.LogLevel, message string, args 
 	if !strings.HasSuffix(m, "\n") {
 		m += "\n"
 	}
+
 	a.writeMutex.Lock()
+	defer a.writeMutex.Unlock()
+
+	// Ensure the file is open
+	if a.file == nil {
+		if err := a.openFile(); err != nil {
+			fmt.Printf("Error opening file: %s\n", err)
+			return
+		}
+	}
+
 	if !a.datewiseRotation {
-		a.file.Write([]byte(m))
-		info, _ := a.file.Stat()
+		if _, err := a.file.Write([]byte(m)); err != nil {
+			fmt.Println("Error writing to file:", err)
+			return
+		}
 		a.bytesWritten += int64(len(m))
+		info, _ := a.file.Stat()
 		if info.Size() >= a.MaxFileSize {
 			a.bytesWritten = 0
 			a.rotateFile()
@@ -112,10 +128,11 @@ func (a *rollingFileAppender) Write(level levels.LogLevel, message string, args 
 			a.rotateFileDateWise(expectedDate)
 			a.bytesWritten = 0
 		}
-		a.file.Write([]byte(m))
+		if _, err := a.file.Write([]byte(m)); err != nil {
+			fmt.Println("Error writing to file:", err)
+		}
 		a.bytesWritten += int64(len(m))
 	}
-	a.writeMutex.Unlock()
 }
 
 func (a *rollingFileAppender) Layout() layout.Layout {
@@ -131,6 +148,9 @@ func (a *rollingFileAppender) Filename() string {
 }
 
 func (a *rollingFileAppender) SetFilename(filename string) error {
+	a.writeMutex.Lock()
+	defer a.writeMutex.Unlock()
+
 	currentTime := time.Now()
 	currentDate := currentTime.Format("2006-01-02")
 	if a.filename != filename || a.file == nil {
@@ -138,7 +158,7 @@ func (a *rollingFileAppender) SetFilename(filename string) error {
 		a.filename = filename
 		if a.datewiseRotation {
 			if a.ReuseableFile {
-				if _, err := os.Stat(a.logDirectory + string(os.PathSeparator) + a.actualFileName[0:len(a.actualFileName)-4] + "_" + currentDate + ".log"); os.IsNotExist(err) {
+				if _, err := os.Stat(filepath.Join(a.logDirectory, a.actualFileName[:len(a.actualFileName)-4]+"_"+currentDate+".log")); os.IsNotExist(err) {
 					os.Remove(a.filename)
 				}
 			} else {
@@ -146,8 +166,9 @@ func (a *rollingFileAppender) SetFilename(filename string) error {
 			}
 			a.currentDateInFile = currentDate
 		}
-		err := a.openFile()
-		return err
+		if err := a.openFile(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -159,11 +180,13 @@ func (a *rollingFileAppender) rotateFileDateWise(expectedDate string) {
 	} else {
 		fileNameSplitter := strings.Split(a.actualFileName, a.currentDateInFile)
 		a.actualFileName = fileNameSplitter[0] + expectedDate + fileNameSplitter[1]
-		a.filename = a.logDirectory + string(os.PathSeparator) + a.actualFileName
+		a.filename = filepath.Join(a.logDirectory, a.actualFileName)
 		a.currentDateInFile = expectedDate
 		a.deleteOutdatedFile()
 	}
-	a.openFile()
+	if err := a.openFile(); err != nil {
+		fmt.Println("Error opening file:", err)
+	}
 }
 
 func (a *rollingFileAppender) deleteOutdatedFile() {
@@ -173,18 +196,15 @@ func (a *rollingFileAppender) deleteOutdatedFile() {
 		for _, file := range files {
 			re := regexp.MustCompile(`\d{4}-\d{2}-\d{2}`)
 			if re.MatchString(file.Name()) {
-				listOfFiles = append(listOfFiles, a.logDirectory+string(os.PathSeparator)+file.Name())
+				listOfFiles = append(listOfFiles, filepath.Join(a.logDirectory, file.Name()))
 			}
-
 		}
 		sort.Strings(listOfFiles)
 		if len(listOfFiles) > a.MaxBackupIndex {
 			for i := 0; i < len(listOfFiles)-a.MaxBackupIndex; i++ {
-				err := os.Remove(listOfFiles[i])
-				if err != nil {
+				if err := os.Remove(listOfFiles[i]); err != nil {
 					fmt.Println(err)
 				}
-
 			}
 		}
 	}
@@ -192,86 +212,113 @@ func (a *rollingFileAppender) deleteOutdatedFile() {
 
 func (a *rollingFileAppender) rotateFile() {
 	a.closeFile()
+	filename := filepath.Base(a.filename)
+
 	if a.backupFolder != "" {
-		_, filename := filepath.Split(a.filename)
 		if a.customFileNameGenerator != nil {
 			filename = a.customFileNameGenerator()
 		}
 		lastFile := filepath.Join(a.backupFolder, filename+"."+strconv.Itoa(a.MaxBackupIndex))
-		pushLogToURL(lastFile, a.LogHookURL, a.Client, a.CustomHeaders)
+		if err := pushLogToURL(lastFile, a.LogHookURL, a.Client, a.CustomHeaders); err != nil {
+			fmt.Println("Error pushing log to URL:", err)
+		}
 		if _, err := os.Stat(a.filename); err == nil {
-			os.Rename(a.filename, lastFile)
+			if err := os.Rename(a.filename, lastFile); err != nil {
+				fmt.Println("Error renaming file:", err)
+			}
 		}
 		for n := a.MaxBackupIndex; n > 0; n-- {
 			f1 := filepath.Join(a.backupFolder, filename+"."+strconv.Itoa(n))
 			f2 := filepath.Join(a.backupFolder, filename+"."+strconv.Itoa(n+1))
-			err := os.Rename(f1, f2)
 			for {
-				if strings.Contains(fmt.Sprintf("%s", err), "The process cannot access the file because it is being used by another process") {
-					err = os.Rename(f1, f2)
-					continue
+				if err := os.Rename(f1, f2); err != nil {
+					if strings.Contains(fmt.Sprintf("%s", err), "The process cannot access the file because it is being used by another process") {
+						time.Sleep(time.Second)
+						continue // Retry renaming
+					}
+					fmt.Println("Error renaming file:", err)
+					break // Exit the loop on error
 				}
-				break
+				break // Exit the retry loop on success
 			}
-			pushLogToURL(f2, a.LogHookURL, a.Client, a.CustomHeaders)
+			if err := pushLogToURL(f2, a.LogHookURL, a.Client, a.CustomHeaders); err != nil {
+				fmt.Println("Error pushing log to URL:", err)
+			}
 		}
-		err := os.Rename(a.filename, filepath.Join(a.backupFolder, filename+".1"))
 		for {
-			if strings.Contains(fmt.Sprintf("%s", err), "The process cannot access the file because it is being used by another process") {
-				err = os.Rename(a.filename, filepath.Join(a.backupFolder, filename+".1"))
-				continue
+			if err := os.Rename(a.filename, filepath.Join(a.backupFolder, filename+".1")); err != nil {
+				if strings.Contains(fmt.Sprintf("%s", err), "The process cannot access the file because it is being used by another process") {
+					time.Sleep(time.Second)
+					continue // Retry renaming
+				}
+				fmt.Println("Error renaming file:", err)
+				break // Exit the loop on error
 			}
-			break
+			break // Exit the retry loop on success
 		}
-		pushLogToURL(filepath.Join(a.backupFolder, filename+".1"), a.LogHookURL, a.Client, a.CustomHeaders)
+		if err := pushLogToURL(filepath.Join(a.backupFolder, filename+".1"), a.LogHookURL, a.Client, a.CustomHeaders); err != nil {
+			fmt.Println("Error pushing log to URL:", err)
+		}
 	} else {
 		lastFile := a.filename + "." + strconv.Itoa(a.MaxBackupIndex)
-		//pushLogToURL(lastFile, a.LogHookURL, a.Client, a.CustomHeaders)
 		if _, err := os.Stat(lastFile); err == nil {
-			os.Rename(a.filename, lastFile)
+			if err := os.Rename(a.filename, lastFile); err != nil {
+				fmt.Println("Error renaming file:", err)
+			}
 		}
 		for n := a.MaxBackupIndex; n > 0; n-- {
 			f1 := a.filename + "." + strconv.Itoa(n)
 			f2 := a.filename + "." + strconv.Itoa(n+1)
-			err := os.Rename(f1, f2)
 			for {
-				if strings.Contains(fmt.Sprintf("%s", err), "The process cannot access the file because it is being used by another process") {
-					err = os.Rename(f1, f2)
-					continue
+				if err := os.Rename(f1, f2); err != nil {
+					if strings.Contains(fmt.Sprintf("%s", err), "The process cannot access the file because it is being used by another process") {
+						time.Sleep(time.Second)
+						continue // Retry renaming
+					}
+					fmt.Println("Error renaming file:", err)
+					break // Exit the loop on error
 				}
-				break
+				break // Exit the retry loop on success
 			}
-			//	pushLogToURL(f2, a.LogHookURL, a.Client, a.CustomHeaders)
 		}
-		err := os.Rename(a.filename, a.filename+".1")
 		for {
-			if strings.Contains(fmt.Sprintf("%s", err), "The process cannot access the file because it is being used by another process") {
-				err = os.Rename(a.filename, a.filename+".1")
-				continue
+			if err := os.Rename(a.filename, a.filename+".1"); err != nil {
+				if strings.Contains(fmt.Sprintf("%s", err), "The process cannot access the file because it is being used by another process") {
+					time.Sleep(time.Second)
+					continue // Retry renaming
+				}
+				fmt.Println("Error renaming file:", err)
+				break // Exit the loop on error
 			}
-			break
+			break // Exit the retry loop on success
 		}
-		//pushLogToURL(a.filename+".1", a.LogHookURL, a.Client, a.CustomHeaders)
 	}
-	a.openFile()
+
+	if err := a.openFile(); err != nil {
+		fmt.Println("Error opening file:", err)
+	}
 }
+
 func (a *rollingFileAppender) closeFile() {
 	if a.file != nil {
-		err := a.file.Close()
-		if err != nil {
-			fmt.Println("ERROR = ", err)
+		if err := a.file.Close(); err != nil {
+			fmt.Println("ERROR =", err)
 		}
 		a.file = nil
 	}
 }
+
 func (a *rollingFileAppender) openFile() error {
 	mode := os.O_WRONLY | os.O_APPEND | os.O_CREATE
 	if !a.append {
 		mode = os.O_WRONLY | os.O_CREATE
 	}
 	f, err := os.OpenFile(a.filename, mode, 0666)
+	if err != nil {
+		return err
+	}
 	a.file = f
-	return err
+	return nil
 }
 
 func pushLogToURL(file string, url string, client *http.Client, customHeaders map[string]string) error {
@@ -284,43 +331,37 @@ func pushLogToURL(file string, url string, client *http.Client, customHeaders ma
 	}
 	defer f.Close()
 
-	logPayloadEntries := []LogPayload{}
+	var logPayloadEntries []LogPayload
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.Contains(line, "Heartbeat") || strings.Contains(line, "EncryptedChunk") || strings.Contains(line, "Decoded") || strings.Contains(line, "CompressedChunk") || strings.Contains(line, "DataToWriteInFile") {
-			// fmt.Println("contains")
 			continue
 		}
 		line = strings.Replace(line, "\\", "\\\\", -1)
-		// fmt.Println(line)
-		logEntry := LogDataEntry{}
-		err = json.Unmarshal([]byte(line), &logEntry)
-		if err != nil {
+		var logEntry LogDataEntry
+		if err := json.Unmarshal([]byte(line), &logEntry); err != nil {
 			fmt.Println(err)
+			continue
 		}
-		// fmt.Println(logEntry)
 		parsedTimeStamp, err := time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", logEntry.Timestamp)
 		if err != nil {
 			fmt.Println(err)
-			break
+			continue
 		}
 		logPayloadEntries = append(logPayloadEntries, LogPayload{logEntry.LogLevel, parsedTimeStamp, logEntry.Message})
 	}
 
-	fCError := f.Close()
-	if fCError != nil {
-		return fCError
-	}
 	renamedFile := file + ".processed"
-	err = os.Rename(file, renamedFile)
-	if err != nil {
+	if err := os.Rename(file, renamedFile); err != nil {
 		return err
 	}
+
 	jsonData, err := json.Marshal(logPayloadEntries)
 	if err != nil {
 		return err
 	}
+
 	req, err := http.NewRequest("POST", url, bytes.NewReader(jsonData))
 	if err != nil {
 		return err
@@ -331,16 +372,14 @@ func pushLogToURL(file string, url string, client *http.Client, customHeaders ma
 		req.Header.Set(k, v)
 	}
 	req.Close = true
+
 	res, err := client.Do(req)
 	if err != nil {
 		return err
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 {
-		return errors.New("Failed to upload logs = " + string(res.StatusCode))
-	}
-	if res.Body != nil {
-		res.Body.Close()
+		return errors.New("Failed to upload logs = " + strconv.Itoa(res.StatusCode))
 	}
 	return nil
 }
@@ -362,12 +401,10 @@ func readLinesFromFile(path string) ([]string, error) {
 }
 
 func calculateMD5ChecksumForStream(body io.Reader) (string, error) {
-	var returnMD5String string
 	hash := md5.New()
 	if _, err := io.Copy(hash, body); err != nil {
 		return "", err
 	}
 	hashInBytes := hash.Sum(nil)[:16]
-	returnMD5String = hex.EncodeToString(hashInBytes)
-	return returnMD5String, nil
+	return hex.EncodeToString(hashInBytes), nil
 }
