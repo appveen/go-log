@@ -193,6 +193,7 @@ func (a *rollingFileAppender) deleteOutdatedFile() {
 func (a *rollingFileAppender) rotateFile() {
 	a.closeFile()
 	if a.backupFolder != "" {
+		fmt.Println("Backup folder present")
 		_, filename := filepath.Split(a.filename)
 		if a.customFileNameGenerator != nil {
 			filename = a.customFileNameGenerator()
@@ -201,11 +202,16 @@ func (a *rollingFileAppender) rotateFile() {
 		pushLogToURL(lastFile, a.LogHookURL, a.Client, a.CustomHeaders)
 		if _, err := os.Stat(a.filename); err == nil {
 			os.Rename(a.filename, lastFile)
+		} else {
+			fmt.Errorf("Error 1.1 - ", err.Error())
 		}
 		for n := a.MaxBackupIndex; n > 0; n-- {
 			f1 := filepath.Join(a.backupFolder, filename+"."+strconv.Itoa(n))
 			f2 := filepath.Join(a.backupFolder, filename+"."+strconv.Itoa(n+1))
 			err := os.Rename(f1, f2)
+			if err != nil {
+				fmt.Errorf("Error 1.2 - ", err.Error())
+			}
 			for {
 				if strings.Contains(fmt.Sprintf("%s", err), "The process cannot access the file because it is being used by another process") {
 					err = os.Rename(f1, f2)
@@ -216,6 +222,9 @@ func (a *rollingFileAppender) rotateFile() {
 			pushLogToURL(f2, a.LogHookURL, a.Client, a.CustomHeaders)
 		}
 		err := os.Rename(a.filename, filepath.Join(a.backupFolder, filename+".1"))
+		if err != nil {
+			fmt.Errorf("Error 1.3 - ", err.Error())
+		}
 		for {
 			if strings.Contains(fmt.Sprintf("%s", err), "The process cannot access the file because it is being used by another process") {
 				err = os.Rename(a.filename, filepath.Join(a.backupFolder, filename+".1"))
@@ -225,15 +234,21 @@ func (a *rollingFileAppender) rotateFile() {
 		}
 		pushLogToURL(filepath.Join(a.backupFolder, filename+".1"), a.LogHookURL, a.Client, a.CustomHeaders)
 	} else {
+		fmt.Println("Backup folder not present")
 		lastFile := a.filename + "." + strconv.Itoa(a.MaxBackupIndex)
 		//pushLogToURL(lastFile, a.LogHookURL, a.Client, a.CustomHeaders)
 		if _, err := os.Stat(lastFile); err == nil {
 			os.Rename(a.filename, lastFile)
+		} else {
+			fmt.Errorf("Error 2.1 - ", err.Error())
 		}
 		for n := a.MaxBackupIndex; n > 0; n-- {
 			f1 := a.filename + "." + strconv.Itoa(n)
 			f2 := a.filename + "." + strconv.Itoa(n+1)
 			err := os.Rename(f1, f2)
+			if err != nil {
+				fmt.Errorf("Error 2.2 - ", err.Error())
+			}
 			for {
 				if strings.Contains(fmt.Sprintf("%s", err), "The process cannot access the file because it is being used by another process") {
 					err = os.Rename(f1, f2)
@@ -244,6 +259,9 @@ func (a *rollingFileAppender) rotateFile() {
 			//	pushLogToURL(f2, a.LogHookURL, a.Client, a.CustomHeaders)
 		}
 		err := os.Rename(a.filename, a.filename+".1")
+		if err != nil {
+			fmt.Errorf("Error 2.3 - ", err.Error())
+		}
 		for {
 			if strings.Contains(fmt.Sprintf("%s", err), "The process cannot access the file because it is being used by another process") {
 				err = os.Rename(a.filename, a.filename+".1")
@@ -280,6 +298,7 @@ func pushLogToURL(file string, url string, client *http.Client, customHeaders ma
 	}
 	f, err := os.OpenFile(file, os.O_RDONLY, 0666)
 	if err != nil {
+		fmt.Errorf("Error 3.1 - ", err.Error())
 		return err
 	}
 	defer f.Close()
@@ -310,19 +329,25 @@ func pushLogToURL(file string, url string, client *http.Client, customHeaders ma
 
 	fCError := f.Close()
 	if fCError != nil {
+		fmt.Errorf("Error 3.2 - ", err.Error())
 		return fCError
 	}
 	renamedFile := file + ".processed"
 	err = os.Rename(file, renamedFile)
 	if err != nil {
+		fmt.Errorf("Error 3.3 - ", err.Error())
 		return err
 	}
 	jsonData, err := json.Marshal(logPayloadEntries)
 	if err != nil {
+		fmt.Errorf("Error 3.4 - ", err.Error())
 		return err
 	}
+	fmt.Println("Pushing Logs to URL - ", url)
+	fmt.Println("Data to be pushed - ", jsonData)
 	req, err := http.NewRequest("POST", url, bytes.NewReader(jsonData))
 	if err != nil {
+		fmt.Errorf("Error 3.5 - ", err.Error())
 		return err
 	}
 	customHeaders["filePath"] = renamedFile
@@ -333,6 +358,7 @@ func pushLogToURL(file string, url string, client *http.Client, customHeaders ma
 	req.Close = true
 	res, err := client.Do(req)
 	if err != nil {
+		fmt.Errorf("Error 3.6 - ", err.Error())
 		return err
 	}
 	defer res.Body.Close()
@@ -340,6 +366,8 @@ func pushLogToURL(file string, url string, client *http.Client, customHeaders ma
 		return errors.New("Failed to upload logs = " + string(res.StatusCode))
 	}
 	if res.Body != nil {
+		fmt.Println("Response data - ", res.Body)
+		fmt.Println("Response statusCode -", res.StatusCode)
 		res.Body.Close()
 	}
 	return nil
