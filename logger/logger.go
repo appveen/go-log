@@ -50,6 +50,7 @@ type Appender interface {
 	Write(level levels.LogLevel, message string, args ...interface{})
 	SetLayout(layout layout.Layout)
 	Layout() layout.Layout
+	UpdateCustomHeaders(headers map[string]string)
 }
 
 // New returns a new Logger
