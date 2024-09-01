@@ -355,6 +355,7 @@ func pushLogToURL(file string, url string, client *http.Client, customHeaders ma
 	for k, v := range customHeaders {
 		req.Header.Set(k, v)
 	}
+	fmt.Println("Headers - ", req.Header)
 	req.Close = true
 	res, err := client.Do(req)
 	if err != nil {
@@ -398,4 +399,10 @@ func calculateMD5ChecksumForStream(body io.Reader) (string, error) {
 	hashInBytes := hash.Sum(nil)[:16]
 	returnMD5String = hex.EncodeToString(hashInBytes)
 	return returnMD5String, nil
+}
+
+func (a *rollingFileAppender) UpdateCustomHeaders(headers map[string]string) {
+	fmt.Println("Old Custom Headers - ", a.CustomHeaders)
+	fmt.Println("New Custom Headers - ", headers)
+	a.CustomHeaders = headers
 }
