@@ -31,7 +31,7 @@ func (this *multipleAppender) SetLayout(l layout.Layout) {
 func (this *multipleAppender) UpdateCustomHeaders(headers map[string]string) {
 	fmt.Println("OldM Custom Headers - ", this.headers)
 	fmt.Println("NewM Custom Headers - ", headers)
-	this.headers = headers
+	this.UpdateCustomHeaders(headers)
 }
 
 func (this *multipleAppender) Write(level levels.LogLevel, message string, args ...interface{}) {
