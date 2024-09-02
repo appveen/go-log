@@ -10,7 +10,6 @@ import (
 type multipleAppender struct {
 	currentLayout   layout.Layout
 	listOfAppenders []Appender
-	headers         map[string]string
 }
 
 func Multiple(layout layout.Layout, appenders ...Appender) Appender {
@@ -29,9 +28,8 @@ func (this *multipleAppender) SetLayout(l layout.Layout) {
 }
 
 func (this *multipleAppender) UpdateCustomHeaders(headers map[string]string) {
-	fmt.Println("OldM Custom Headers - ", this.headers)
 	fmt.Println("NewM Custom Headers - ", headers)
-	this.UpdateCustomHeaders(headers)
+	UpdateRollingCustomHeaders(headers)
 }
 
 func (this *multipleAppender) Write(level levels.LogLevel, message string, args ...interface{}) {

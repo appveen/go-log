@@ -24,6 +24,8 @@ import (
 	"github.com/appveen/go-log/levels"
 )
 
+var CustomRHeaders map[string]string
+
 type rollingFileAppender struct {
 	Appender
 	layout         layout.Layout
@@ -355,6 +357,11 @@ func pushLogToURL(file string, url string, client *http.Client, customHeaders ma
 	for k, v := range customHeaders {
 		req.Header.Set(k, v)
 	}
+	if CustomRHeaders != nil {
+		for k, v := range CustomRHeaders {
+			req.Header.Set(k, v)
+		}
+	}
 	fmt.Println("Headers - ", req.Header)
 	req.Close = true
 	res, err := client.Do(req)
@@ -401,8 +408,7 @@ func calculateMD5ChecksumForStream(body io.Reader) (string, error) {
 	return returnMD5String, nil
 }
 
-func (a *rollingFileAppender) UpdateCustomHeaders(headers map[string]string) {
-	fmt.Println("Old Custom Headers - ", a.CustomHeaders)
-	fmt.Println("New Custom Headers - ", headers)
-	a.CustomHeaders = headers
+func UpdateRollingCustomHeaders(headers map[string]string) {
+	fmt.Println("NewR Custom Headers - ", headers)
+	CustomRHeaders = headers
 }
